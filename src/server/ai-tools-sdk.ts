@@ -1111,6 +1111,20 @@ export function createSDKTools(
 
         const displayW = width ?? TOOL_DEFAULTS.image.width;
         const displayH = height ?? TOOL_DEFAULTS.image.height;
+        const isBackdrop = displayW >= 800 && displayH >= 600;
+        if (isBackdrop) {
+          // Full-canvas backdrop: pin to canvas origin, mark as background, skip budget
+          const obj = makeObject(
+            "image",
+            { x: CANVAS_MIN_X, y: CANVAS_MIN_Y },
+            displayW,
+            displayH,
+            { src, prompt },
+            batchId,
+          );
+          obj.isBackground = true;
+          return createAndMutate(stub, obj);
+        }
         const pos = await flowPlace(displayW, displayH);
         const obj = makeObject("image", pos, displayW, displayH, { src, prompt }, batchId);
         return enforcedCreate(obj);
