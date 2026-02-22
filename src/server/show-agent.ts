@@ -208,9 +208,8 @@ export class ShowAgent extends DurableObject<Bindings> {
 
   /** Run one AI persona turn: build prompt, call generateText, tools mutate the board */
   private async _runTurn(boardId: string, premise: string, turnCount: number, personaIndex: number): Promise<void> {
-    // KEY-DECISION 2026-02-22: BOARD binding uses idFromString (boardId is a DO ID string
-    // stored by the API route when creating the show). Same pattern as ChatAgent.
-    const doId = this.env.BOARD.idFromString(boardId);
+    // Board DO is addressed by name (UUID boardId), same as ChatAgent and index.ts routes.
+    const doId = this.env.BOARD.idFromName(boardId);
     const boardStub = this.env.BOARD.get(doId) as unknown as BoardStub;
 
     // Normal budget for shows (not crisis-capped - drama unfolds at the prompt level)
