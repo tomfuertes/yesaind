@@ -22,7 +22,8 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { createSDKTools } from "./ai-tools-sdk";
 import type { CreateBudget, SharedBounds } from "./ai-tools-sdk";
 import { buildPersonaSystemPrompt } from "./prompts/personas";
-import { SYSTEM_PROMPT } from "./prompts/system";
+import { SYSTEM_PROMPT, PROMPT_VERSION } from "./prompts";
+import { createTracingMiddleware, wrapLanguageModel, Langfuse } from "./tracing-middleware";
 import type { BoardStub } from "../shared/types";
 import { DEFAULT_PERSONAS } from "../shared/types";
 import type { Bindings } from "./env";
@@ -206,6 +207,25 @@ export class ShowAgent extends DurableObject<Bindings> {
   // Private helpers
   // ---------------------------------------------------------------------------
 
+  /** Lazily initialize Langfuse client. Returns null if env vars not configured. */
+  private _langfuseClient: Langfuse | null | undefined = undefined;
+
+  private _getLangfuse(): Langfuse | null {
+    if (this._langfuseClient !== undefined) return this._langfuseClient as Langfuse | null;
+    if (!this.env.LANGFUSE_PUBLIC_KEY || !this.env.LANGFUSE_SECRET_KEY) {
+      this._langfuseClient = null;
+      return null;
+    }
+    this._langfuseClient = new Langfuse({
+      publicKey: this.env.LANGFUSE_PUBLIC_KEY,
+      secretKey: this.env.LANGFUSE_SECRET_KEY,
+      baseUrl: this.env.LANGFUSE_BASE_URL || "https://cloud.langfuse.com",
+      flushAt: 1,
+      flushInterval: 0,
+    });
+    return this._langfuseClient;
+  }
+
   /** Run one AI persona turn: build prompt, call generateText, tools mutate the board */
   private async _runTurn(boardId: string, premise: string, turnCount: number, personaIndex: number): Promise<void> {
     // Board DO is addressed by name (UUID boardId), same as ChatAgent and index.ts routes.
@@ -252,11 +272,30 @@ export class ShowAgent extends DurableObject<Bindings> {
     );
 
     const anthropic = createAnthropic({ apiKey: this.env.ANTHROPIC_API_KEY });
+    const showModelId = "claude-haiku-4.5";
 
     // KEY-DECISION 2026-02-22: generateText (not streamText) - no client to stream to.
     // Always Haiku for shows: cost-optimal ($0.007/turn), well-tuned for this prompt.
+    const baseModel = anthropic("claude-haiku-4-5-20251001");
+    const langfuse = this._getLangfuse();
+    const model = langfuse
+      ? wrapLanguageModel({
+          model: baseModel,
+          middleware: createTracingMiddleware(
+            {
+              boardId,
+              trigger: "show",
+              persona: activePersona.name,
+              model: showModelId,
+              promptVersion: PROMPT_VERSION,
+            },
+            langfuse,
+          ),
+        })
+      : baseModel;
+
     const result = await generateText({
-      model: anthropic("claude-haiku-4-5-20251001"),
+      model,
       system: systemPrompt,
       messages: [{ role: "user", content: userMessage }],
       tools,

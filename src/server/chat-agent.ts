@@ -151,11 +151,24 @@ export function containsFlaggedContent(text: string): boolean {
 }
 
 /**
- * Sanitize UIMessages to ensure all tool invocation inputs are valid objects.
- * Some LLMs (especially smaller ones) sometimes emit tool calls with string,
- * null, or array inputs instead of JSON objects. This causes API validation
- * errors ("Input should be a valid dictionary") when the conversation history
- * is sent back to the model on subsequent turns.
+ * Sanitize UIMessages to ensure all tool invocations are safe to replay.
+ *
+ * Covers two classes of bugs that cause Anthropic API errors when conversation
+ * history is sent back to the model:
+ *
+ * 1. Malformed tool inputs (null/array instead of object) - causes
+ *    "Input should be a valid dictionary" errors.
+ *
+ * 2. Orphaned tool_use blocks - assistant messages with tool-call parts in
+ *    state "input-available" or "input-streaming" have no corresponding
+ *    tool_result in the history (the tool never ran). convertToModelMessages
+ *    emits the tool-call content block but no tool-result block, causing
+ *    Anthropic's "tool_use IDs without tool_result blocks" error. Fix: strip
+ *    those parts entirely so the orphaned call never reaches the API.
+ *
+ * KEY-DECISION 2026-02-22: Stripping incomplete tool parts is safe - these
+ * are streaming artifacts from aborted/interrupted multi-step calls. The
+ * model has no memory of them; omitting them from history is correct.
  */
 function sanitizeMessages(messages: UIMessage[]): { messages: UIMessage[]; repairedCount: number } {
   let repairedCount = 0;
@@ -163,45 +176,73 @@ function sanitizeMessages(messages: UIMessage[]): { messages: UIMessage[]; repai
     if (msg.role !== "assistant" || !msg.parts) return msg;
 
     let needsRepair = false;
-    const cleanedParts = msg.parts.map((part) => {
-      const p = part as any;
+    const cleanedParts = msg.parts
+      .filter((part) => {
+        const p = part as any;
+        // Strip incomplete tool parts that produce orphaned tool_use blocks.
+        // "input-streaming" = call still being streamed (interrupted mid-stream).
+        // "input-available" = call received but execution never started.
+        // convertToModelMessages emits tool-call for both but no tool-result,
+        // causing Anthropic API error: "tool_use IDs without tool_result blocks".
+        const isOrphaned =
+          (typeof p.type === "string" &&
+            p.type.startsWith("tool-") &&
+            p.type !== "dynamic-tool" &&
+            (p.state === "input-streaming" || p.state === "input-available")) ||
+          (p.type === "dynamic-tool" && (p.state === "input-streaming" || p.state === "input-available"));
+        if (isOrphaned) {
+          needsRepair = true;
+          console.warn(
+            JSON.stringify({
+              event: "ai:sanitize:orphan-tool",
+              tool: p.type === "dynamic-tool" ? p.toolName : p.type.slice(5),
+              state: p.state,
+              toolCallId: p.toolCallId,
+            }),
+          );
+          return false;
+        }
+        return true;
+      })
+      .map((part) => {
+        const p = part as any;
 
-      // Static tool parts (from streamText): type is "tool-<toolName>"
-      // AI SDK v6 names these "tool-createStickyNote", "tool-getBoardState", etc.
-      if (
-        typeof p.type === "string" &&
-        p.type.startsWith("tool-") &&
-        p.type !== "dynamic-tool" &&
-        !isPlainObject(p.input)
-      ) {
-        needsRepair = true;
-        console.warn(
-          JSON.stringify({
-            event: "ai:sanitize:input",
-            tool: p.type.slice(5),
-            inputType: p.input === null ? "null" : Array.isArray(p.input) ? "array" : typeof p.input,
-            toolCallId: p.toolCallId,
-          }),
-        );
-        return { ...p, input: {} };
-      }
+        // Static tool parts (from streamText): type is "tool-<toolName>"
+        // AI SDK v6 names these "tool-createStickyNote", "tool-getBoardState", etc.
+        if (
+          typeof p.type === "string" &&
+          p.type.startsWith("tool-") &&
+          p.type !== "dynamic-tool" &&
+          !isPlainObject(p.input)
+        ) {
+          needsRepair = true;
+          console.warn(
+            JSON.stringify({
+              event: "ai:sanitize:input",
+              tool: p.type.slice(5),
+              inputType: p.input === null ? "null" : Array.isArray(p.input) ? "array" : typeof p.input,
+              toolCallId: p.toolCallId,
+            }),
+          );
+          return { ...p, input: {} };
+        }
 
-      // dynamic-tool parts (from director generateText)
-      if (p.type === "dynamic-tool" && !isPlainObject(p.input)) {
-        needsRepair = true;
-        console.warn(
-          JSON.stringify({
-            event: "ai:sanitize:input",
-            tool: p.toolName,
-            inputType: p.input === null ? "null" : Array.isArray(p.input) ? "array" : typeof p.input,
-            toolCallId: p.toolCallId,
-          }),
-        );
-        return { ...p, input: {} };
-      }
+        // dynamic-tool parts (from director generateText)
+        if (p.type === "dynamic-tool" && !isPlainObject(p.input)) {
+          needsRepair = true;
+          console.warn(
+            JSON.stringify({
+              event: "ai:sanitize:input",
+              tool: p.toolName,
+              inputType: p.input === null ? "null" : Array.isArray(p.input) ? "array" : typeof p.input,
+              toolCallId: p.toolCallId,
+            }),
+          );
+          return { ...p, input: {} };
+        }
 
-      return part;
-    });
+        return part;
+      });
 
     if (needsRepair) {
       repairedCount++;
@@ -1370,6 +1411,7 @@ export class ChatAgent extends AIChatAgent<Bindings> {
           sharedBounds,
           false, // qaMode: SM: never bypasses caps
           stageManagerMaxCreates,
+          this._getLangfuse(),
         );
         this._isGenerating = false;
         await clearPresence();
@@ -1395,6 +1437,7 @@ export class ChatAgent extends AIChatAgent<Bindings> {
           sharedBounds,
           qaMode,
           stageManagerMaxCreates,
+          this._getLangfuse(),
         );
       }
 
@@ -1522,6 +1565,7 @@ export class ChatAgent extends AIChatAgent<Bindings> {
     sharedBounds?: SharedBounds,
     qaMode = false,
     maxCreates = 3,
+    langfuse?: Langfuse | null,
   ): Promise<void> {
     // Persist for troupe-aware persona rotation on subsequent messages (survives DO hibernation)
     await this.ctx.storage.put("troupeConfig", troupeConfig);
@@ -1543,6 +1587,7 @@ export class ChatAgent extends AIChatAgent<Bindings> {
 
     // Model selection: stageManagerModel if specified, else fall through to current _getModel()
     let model = this._getModel();
+    const stageManagerModelId = troupeConfig.stageManagerModel ?? this._getModelName();
     if (troupeConfig.stageManagerModel) {
       const entry = AI_MODELS.find((m) => m.id === troupeConfig.stageManagerModel);
       if (entry) {
@@ -1553,6 +1598,21 @@ export class ChatAgent extends AIChatAgent<Bindings> {
         }
         // workers-ai: fall through to _getModel() which already handles workers-ai models
       }
+    }
+    if (langfuse) {
+      model = wrapLanguageModel({
+        model,
+        middleware: createTracingMiddleware(
+          {
+            boardId: this.name,
+            trigger: "stage-manager",
+            persona: "StageManager",
+            model: stageManagerModelId,
+            promptVersion: PROMPT_VERSION,
+          },
+          langfuse,
+        ),
+      });
     }
 
     const batchId = crypto.randomUUID();
