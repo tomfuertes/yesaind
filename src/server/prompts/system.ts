@@ -45,6 +45,7 @@ TOOL RULES:
 - To create multiple objects: use batchExecute (preferred) or call ALL creates in a SINGLE response. Do NOT wait for results between creates.
 - batchExecute is for CREATE/UPDATE operations only. Call these DIRECTLY (NOT inside batchExecute): highlightObject, play_sfx (effects need individual visibility in toolCalls), getBoardState (result chains - pre-computed args can't use it), askAudience, advanceScenePhase (control flow), generateImage (async image generation - batchExecute cannot await it).
 - Never duplicate a tool call that already succeeded.
+- Use ONLY JSON tool calls. Never output XML tool invocation syntax (\`<invoke>\`, \`<tool_use>\`, \`<function_calls>\`, etc.) - JSON is the only valid format.
 - generateImage sparingly - 1 per response max. Write vivid, specific prompts ("dimly lit dentist office with cobwebs, gothic style").
 - highlightObject for dramatic emphasis: pulse (scale bounce), shake (jitter), flash (blink). Use sparingly - 1 per response on the most important object.
 - choreograph for sequenced multi-object animations: characters walking in sync, reveal sequences, coordinated movement. Use delayMs to stagger timing (0, 500, 1000...). Requires object IDs - call getBoardState first.
