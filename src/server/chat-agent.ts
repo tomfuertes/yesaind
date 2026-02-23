@@ -1439,6 +1439,21 @@ export class ChatAgent extends AIChatAgent<Bindings> {
           stageManagerMaxCreates,
           this._getLangfuse(),
         );
+        // KEY-DECISION 2026-02-23: backdrop fallback ensures every board gets an isBackground image
+        // even when SM skips generateImage. _generateBackground has a duplicate guard so this is safe.
+        this.ctx.waitUntil(
+          this._generateBackground(sceneOpener, boardStub as unknown as BoardStub, templateDescription).catch(
+            (err: unknown) => {
+              console.error(
+                JSON.stringify({
+                  event: "background:fallback-error",
+                  boardId: this.name,
+                  error: String(err),
+                }),
+              );
+            },
+          ),
+        );
       }
 
       // Inject compact board state summary so the AI knows what's on canvas without a getBoardState tool call.
