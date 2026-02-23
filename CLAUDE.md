@@ -163,6 +163,14 @@ npx playwright test e2e/sync.spec.ts   # run one file
 npx playwright test --reporter=dot     # minimal output (default 'list' floods context)
 ```
 
+**UAT fast-path (devcontainer):** `playwright-cli` and `agent-browser` are both unavailable in this devcontainer. Do NOT try them - go straight to `npx playwright test`. Write a spec in `e2e/`, use helpers from `e2e/helpers.ts` (`signUp`, `createBoard`, `navigateToBoard`), run with `BACKDROP_TEST_URL=https://yesaind.com npx playwright test e2e/<spec>.spec.ts --reporter=dot`. Always `dangerouslyDisableSandbox: true`.
+
+**Confirmed working selectors (prod):**
+- OnboardModal step 0→1: `button:has-text("Next →")` | step 1→2: `button:has-text("Next")` | step 2 premise: `page.fill('input[placeholder*="detective"]', '...')` then `button:has-text("Go")`
+- ChatPanel: opens via toolbar speech bubble button (NOT `/` keyboard shortcut). Input: `textarea[placeholder="Ask the AI..."]` + `page.press(..., 'Enter')` to send.
+- Crisis chips: `button:has-text("escalate!")` / `button:has-text("Plot Twist!")`
+- After sending a message, poll `context.request.get('/api/boards/{id}/objects')` every 3-5s until objects appear. Never `sleep 120` - AI responds in 6-10s.
+
 **Known gotchas:**
 
 - **Reactive persona UAT timing:** SAGE/reactive persona reliably triggers on the 2nd+ exchange, not the 1st (timing gap: `ctx.waitUntil` fires before base class adds the new assistant message to `this.messages`). GLM reactive `generateText` takes 30-40s. UAT must send a follow-up message before testing SAGE, then wait 45-60s.
