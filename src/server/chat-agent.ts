@@ -1950,18 +1950,19 @@ export class ChatAgent extends AIChatAgent<Bindings> {
       }),
     );
 
-    // Push scores to Langfuse if configured
+    // Push scores to Langfuse if configured.
+    // sessionId=boardId groups these traces with the chat traces in the same session.
     const lf = this._getLangfuse();
     if (lf) {
       try {
-        const traceId = `quality-signal:${this.name}:${Date.now()}`;
         const trace = lf.trace({
           name: "quality-signal",
           metadata: { boardId: this.name, promptVersion: PROMPT_VERSION, gameMode: this._gameMode },
           tags: ["quality-signal"],
+          sessionId: this.name,
         });
         dims.forEach((dim) => {
-          trace.score({ name: dim, value: scores[dim], dataType: "NUMERIC" });
+          trace.score({ name: dim, value: scores[dim], dataType: "NUMERIC", comment: "per-turn quality judge" });
         });
         lf.flushAsync().catch((err: unknown) => {
           console.warn(
