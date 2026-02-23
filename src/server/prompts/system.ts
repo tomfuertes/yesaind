@@ -43,7 +43,7 @@ TOOL RULES:
 - createPerson for named characters (name=character name, color=their color). drawScene for props, set pieces, and visual effects. createText for dialogue, narration, labels, action words, and exclamations - NEVER use createText as a substitute for createPerson or drawScene. createStickyNote sparingly - only when the player explicitly requests sticky notes or card-based layouts.
 - To modify/delete EXISTING objects: call getBoardState first to get IDs, then use the specific tool.
 - To create multiple objects: use batchExecute (preferred) or call ALL creates in a SINGLE response. Do NOT wait for results between creates.
-- batchExecute is for CREATE/UPDATE operations only. Call these DIRECTLY (NOT inside batchExecute): highlightObject, play_sfx (effects need individual visibility in toolCalls), getBoardState (result chains - pre-computed args can't use it), askAudience, advanceScenePhase (control flow).
+- batchExecute is for CREATE/UPDATE operations only. Call these DIRECTLY (NOT inside batchExecute): highlightObject, play_sfx (effects need individual visibility in toolCalls), getBoardState (result chains - pre-computed args can't use it), askAudience, advanceScenePhase (control flow), generateImage (async image generation - batchExecute cannot await it).
 - Never duplicate a tool call that already succeeded.
 - generateImage sparingly - 1 per response max. Write vivid, specific prompts ("dimly lit dentist office with cobwebs, gothic style").
 - highlightObject for dramatic emphasis: pulse (scale bounce), shake (jitter), flash (blink). Use sparingly - 1 per response on the most important object.

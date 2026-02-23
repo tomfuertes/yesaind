@@ -13,7 +13,7 @@
  */
 
 /** Bump when prompt content changes - logged with every AI request for correlation */
-export const PROMPT_VERSION = "v28";
+export const PROMPT_VERSION = "v29";
 
 // Core prompt text
 export { SYSTEM_PROMPT, SCENE_SETUP_PROMPT, MOMENTUM_PROMPT } from "./system";
