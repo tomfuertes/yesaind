@@ -121,7 +121,7 @@ npm run update-deps      # bumps all deps except vite/plugin-react (major), then
 
 ## Git Worktrees
 
-After worktree creation, run `npm ci` to install deps (lockfile-only, fast). If the agent needs API keys (eval, dev server), copy `.dev.vars`: `cp /Users/tomfuertes/sandbox/git-repos/gauntlet-week1-collab-board/.dev.vars .dev.vars`.
+After worktree creation, run `npm ci` to install deps (lockfile-only, fast). If the agent needs API keys (eval, dev server), copy `.dev.vars`: `cp /Users/tomfuertes/sandbox/git-repos/yesaind/.dev.vars .dev.vars`.
 
 See `~/.claude/CLAUDE.md` for universal worktree conventions (merge safety, absolute paths, isolation).
 

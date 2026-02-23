@@ -5,7 +5,7 @@
 ### 1. Push all commits to deploy
 Git auth expired in devcontainer. From laptop:
 ```bash
-cd ~/sandbox/git-repos/gauntlet-week1-collab-board
+cd ~/sandbox/git-repos/yesaind
 git push
 npm run migrate:remote
 ```

@@ -1,7 +1,7 @@
 # AI Cost Analysis - YesAInd
 
 **Project:** YesAInd - multiplayer improv canvas with AI agent integration
-**Sprint:** Gauntlet Week 1 (6-day build, Feb 2026)
+**Sprint:** 6-day build, Feb 2026
 
 ---
 

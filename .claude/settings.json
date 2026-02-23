@@ -1,6 +1,6 @@
 {
   "env": {
-    "CLAUDE_CODE_TASK_LIST_ID": "gauntlet-week-one"
+    "CLAUDE_CODE_TASK_LIST_ID": "yesaind"
   },
   "hooks": {
     "PermissionRequest": [
